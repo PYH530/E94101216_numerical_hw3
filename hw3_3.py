@@ -1,41 +1,50 @@
 import numpy as np
 from scipy.interpolate import CubicHermiteSpline
-from scipy.optimize import fsolve, minimize_scalar
 
-# 已知數據點
-T = np.array([0, 3, 5, 8, 13])  # 時間 (秒)
-D = np.array([0, 200, 375, 620, 990])  # 位置 (英尺)
-V = np.array([75, 77, 80, 74, 72])  # 速度 (英尺/秒)
+# 原始資料
+T = np.array([0, 3, 5, 8, 13])    # 時間 (秒)
+D = np.array([0, 200, 375, 620, 990])  # 距離 (英尺)
+V = np.array([75, 77, 80, 74, 72])   # 速度 (英尺/秒)
 
-# 1. 使用 Cubic Hermite Spline 進行插值
+# 創建Hermite插值函數（同時使用位置和速度資料）
 hermite_spline = CubicHermiteSpline(T, D, V)
 
-# 2. 預測 t = 10 秒時的 位置 D(10) 和 速度 V(10)
-t_10 = 10
-D_10 = hermite_spline(t_10)  # 位置
-V_10 = hermite_spline.derivative()(t_10)  # 速度
+# 問題a: 預測t=10秒時的位置和速度
+t_eval = 10
+position_10 = hermite_spline(t_eval)
+speed_10 = hermite_spline.derivative()(t_eval)
 
-print(f"a. D(10) = {D_10:.2f} 英尺, V(10) = {V_10:.2f} 英尺/秒")
+# 問題b: 檢查是否超速 (55 mi/h = 80.6667 ft/s)
+speed_limit = 55 * 5280 / 3600  
+t_fine = np.linspace(0, 13, 1000)
+speeds = hermite_spline.derivative()(t_fine)
 
-# 3. 判斷何時超過 80.67 ft/s
-speed_limit = 80.67
+# 尋找超速時刻（考慮數值精度）
+exceeds = np.where(speeds > speed_limit + 1e-6)[0]  # 加入小量避免浮點誤差
+if len(exceeds) > 0:
+    first_exceed_idx = exceeds[0]
+    first_exceed_time = t_fine[first_exceed_idx]
+else:
+    first_exceed_time = None
 
-def speed_eq(t):
-    return hermite_spline.derivative()(t) - speed_limit
+# 問題c: 計算最高速度
+max_speed = np.max(speeds)
+max_speed_time = t_fine[np.argmax(speeds)]
 
-try:
-    t_exceed = fsolve(speed_eq, x0=5)  # 初始猜測為 5 秒
-    t_exceed = t_exceed[(t_exceed >= 0) & (t_exceed <= 13)]  # 只保留有效範圍內的解
-    if len(t_exceed) > 0:
-        print(f"b. 第一次超過 55 mi/h (80.67 ft/s) 的時間: t = {t_exceed[0]:.2f} 秒")
-    else:
-        print("車輛從未超過 55 mi/h")
-except:
-    print("無法計算超速時間")
 
-# 4. 預測最大速度
-res = minimize_scalar(lambda t: -hermite_spline.derivative()(t), bounds=(0, 13), method='bounded')
-t_max_speed = res.x
-V_max = -res.fun  # 取反求最大值
+# 印出結果
+print("=== 問題a ===")
+print(f"在 t=10秒 時:")
+print(f"  預測位置 = {position_10:.1f} 英尺")
+print(f"  預測速度 = {speed_10:.2f} ft/s ({speed_10*3600/5280:.1f} mi/h)")
 
-print(f"c. 最大速度 = {V_max:.2f} 英尺/秒, 發生時間: t = {t_max_speed:.2f} 秒")
+print("\n=== 問題b ===")
+if first_exceed_time:
+    print(f"汽車在 {first_exceed_time:.2f} 秒時首次超速")
+    print(f"  超速時速度 = {speeds[first_exceed_idx]:.2f} ft/s ({speeds[first_exceed_idx]*3600/5280:.1f} mi/h)")
+else:
+    print("汽車未超過限速")
+
+print("\n=== 問題c ===")
+print(f"預測最高速度 = {max_speed:.2f} ft/s ({max_speed*3600/5280:.1f} mi/h)")
+print(f"出現在 {max_speed_time:.2f} 秒")
